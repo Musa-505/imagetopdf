@@ -25,13 +25,21 @@ const translations = {
   retrieveError: 'PDF-ті алу кезінде қате',
   storageError: 'Қоймаға қол жеткізу кезінде қате',
   downloadError: 'PDF-ті жүктеп алу кезінде қате',
-  clearConfirm: 'Сақталған PDF тарихын тазалағыңыз келетініне сенімдісіз бе?'
+  clearConfirm: 'Сақталған PDF тарихын тазалағыңыз келетініне сенімдісіз бе?',
+  pdfOrientation: 'PDF бағдарламасы',
+  portrait: 'Тік',
+  landscape: 'Көлденең',
+  imageOrientation: 'Суреттерді орналастыру',
+  imagePortrait: 'Тігіне',
+  imageLandscape: 'Еніне'
 }
 
 function App() {
   const [images, setImages] = useState([])
   const [isConverting, setIsConverting] = useState(false)
   const [savedPDFs, setSavedPDFs] = useState([])
+  const [orientation, setOrientation] = useState('portrait')
+  const [imageOrientation, setImageOrientation] = useState('portrait')
 
   // Load saved PDFs from localStorage on mount
   useEffect(() => {
@@ -76,7 +84,11 @@ function App() {
     setIsConverting(true)
 
     try {
-      const pdf = new jsPDF()
+      const pdf = new jsPDF({
+        orientation: orientation === 'landscape' ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
       const pdfWidth = pdf.internal.pageSize.getWidth()
       const pdfHeight = pdf.internal.pageSize.getHeight()
 
@@ -90,15 +102,57 @@ function App() {
 
         await new Promise((resolve) => {
           img.onload = () => {
-            const imgWidth = img.width
-            const imgHeight = img.height
+            let imgWidth = img.width
+            let imgHeight = img.height
+            let needsRotation = false
+            let rotationAngle = 0
+            
+            // Суреттің бағдарламасын тексеру және қажет болса бұру
+            if (imageOrientation === 'portrait') {
+              // Егер сурет landscape болса (ені > биіктігі), оны тігіне айналдыру
+              if (imgWidth > imgHeight) {
+                needsRotation = true
+                rotationAngle = Math.PI / 2 // Сағат тіліне қарсы 90 градус
+                const temp = imgWidth
+                imgWidth = imgHeight
+                imgHeight = temp
+              }
+            } else if (imageOrientation === 'landscape') {
+              // Егер сурет portrait болса (биіктігі > ені), оны еніне айналдыру
+              if (imgHeight > imgWidth) {
+                needsRotation = true
+                rotationAngle = -Math.PI / 2 // Сағат тілі бағытында 90 градус
+                const temp = imgWidth
+                imgWidth = imgHeight
+                imgHeight = temp
+              }
+            }
+            
             const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
             const width = imgWidth * ratio
             const height = imgHeight * ratio
             const x = (pdfWidth - width) / 2
             const y = (pdfHeight - height) / 2
 
-            pdf.addImage(img, 'JPEG', x, y, width, height)
+            if (needsRotation) {
+              // Canvas пайдаланып суретті бұру
+              const canvas = document.createElement('canvas')
+              const ctx = canvas.getContext('2d')
+              canvas.width = imgHeight
+              canvas.height = imgWidth
+              
+              // Canvas-ты бұру
+              ctx.translate(canvas.width / 2, canvas.height / 2)
+              ctx.rotate(rotationAngle)
+              ctx.drawImage(img, -img.width / 2, -img.height / 2)
+              
+              // Бұрылған суретті PDF-ке қосу
+              const rotatedImageData = canvas.toDataURL('image/jpeg')
+              pdf.addImage(rotatedImageData, 'JPEG', x, y, width, height)
+            } else {
+              pdf.addImage(img, 'JPEG', x, y, width, height)
+            }
+            
             resolve()
           }
         })
@@ -309,6 +363,58 @@ function App() {
                     <p className="image-name">{image.name}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="orientation-section">
+              <label className="orientation-label">{translations.pdfOrientation}:</label>
+              <div className="orientation-options">
+                <label className="orientation-option">
+                  <input
+                    type="radio"
+                    name="orientation"
+                    value="portrait"
+                    checked={orientation === 'portrait'}
+                    onChange={(e) => setOrientation(e.target.value)}
+                  />
+                  <span>{translations.portrait}</span>
+                </label>
+                <label className="orientation-option">
+                  <input
+                    type="radio"
+                    name="orientation"
+                    value="landscape"
+                    checked={orientation === 'landscape'}
+                    onChange={(e) => setOrientation(e.target.value)}
+                  />
+                  <span>{translations.landscape}</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="orientation-section">
+              <label className="orientation-label">{translations.imageOrientation}:</label>
+              <div className="orientation-options">
+                <label className="orientation-option">
+                  <input
+                    type="radio"
+                    name="imageOrientation"
+                    value="portrait"
+                    checked={imageOrientation === 'portrait'}
+                    onChange={(e) => setImageOrientation(e.target.value)}
+                  />
+                  <span>{translations.imagePortrait}</span>
+                </label>
+                <label className="orientation-option">
+                  <input
+                    type="radio"
+                    name="imageOrientation"
+                    value="landscape"
+                    checked={imageOrientation === 'landscape'}
+                    onChange={(e) => setImageOrientation(e.target.value)}
+                  />
+                  <span>{translations.imageLandscape}</span>
+                </label>
               </div>
             </div>
 
